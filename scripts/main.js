@@ -9,7 +9,8 @@ const MAX_SPEED = SPEEDS[SPEEDS.length - 1];
 
 let speed = readSpeed();
 let mobileControls = null;
-let mobileSpeedButton = null;
+let pauseMenuSpeedButton = null;
+let pauseMenuHooked = false;
 
 // Keep the normal frame-time calculation and multiply only local gameplay time.
 Time.setDeltaProvider(floatp(function(){
@@ -36,29 +37,37 @@ Events.on(ClientLoadEvent, cons(function(){
 
 function buildControls(){
     if(Vars.mobile){
-        buildNativeMobileControl();
+        buildNativePauseControl();
     }else{
         buildDesktopControls();
     }
 }
 
-// On iOS, extend the HUD button row that Mindustry already creates instead of
-// adding a separate scene overlay. This survives mobile screen/layout changes.
-function buildNativeMobileControl(){
-    if(Vars.headless || Vars.ui == null || Core.scene == null) return;
-    if(mobileSpeedButton != null && mobileSpeedButton.parent != null) return;
+// On iOS, add the control to Mindustry's existing pause/menu dialog. The
+// mobile HUD is rebuilt by the game and is not a stable extension point.
+function buildNativePauseControl(){
+    if(Vars.headless || Vars.ui == null || Vars.ui.paused == null || pauseMenuHooked) return;
 
-    mobileSpeedButton = null;
-    const nativeButtons = Core.scene.find("mobile buttons");
-    if(nativeButtons == null) return;
+    Vars.ui.paused.shown(run(function(){
+        addPauseMenuControl();
+    }));
+    pauseMenuHooked = true;
+}
 
-    const cell = nativeButtons.button(formatSpeed() + "×", Styles.clearTogglet, run(function(){
+function addPauseMenuControl(){
+    if(Vars.ui == null || Vars.ui.paused == null || Vars.ui.paused.cont == null) return;
+    if(pauseMenuSpeedButton != null && pauseMenuSpeedButton.parent != null) return;
+
+    const menu = Vars.ui.paused.cont;
+    if(menu.find("mindustry-timescale-pause") != null) return;
+
+    const cell = menu.buttonRow("Time Scale: " + formatSpeed() + "×", Icon.play, run(function(){
         cycleSpeed();
-    })).size(65);
-    cell.name("mindustry-timescale-speed");
-    mobileSpeedButton = cell.get();
-    mobileSpeedButton.update(run(function(){
-        mobileSpeedButton.setText(formatSpeed() + "×");
+    }));
+    cell.name("mindustry-timescale-pause");
+    pauseMenuSpeedButton = cell.get();
+    pauseMenuSpeedButton.update(run(function(){
+        pauseMenuSpeedButton.setText("Time Scale: " + formatSpeed() + "×");
     }));
 }
 
