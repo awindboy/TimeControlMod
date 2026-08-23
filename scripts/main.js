@@ -21,25 +21,28 @@ Time.setDeltaProvider(floatp(function(){
     return Mathf.clamp(frameDelta * multiplier, 0.0001, Vars.maxDeltaClient);
 }));
 
-Events.run(Trigger.update, run(handleInput));
+Events.run(Trigger.update, run(function(){
+    // UI may be initialized after scripts on some mobile builds; retry lazily.
+    if(mobileControls == null) buildMobileControls();
+    handleInput();
+}));
 Events.on(ClientLoadEvent, cons(function(){
     print("Time Scale loaded. Speed: " + formatSpeed() + "x");
-    buildMobileControls();
 }));
 
 function buildMobileControls(){
-    if(!Vars.mobile || Vars.ui == null || Vars.ui.hudGroup == null || mobileControls != null) return;
+    if(Vars.headless || Vars.ui == null || Vars.ui.hudGroup == null || mobileControls != null) return;
 
     mobileControls = new Table();
     mobileControls.name = "mindustry-timescale-controls";
     mobileControls.setFillParent(true);
     mobileControls.touchable = Touchable.childrenOnly;
-    mobileControls.visible(boolp(function(){
+    // Element.visible is a boolean field in Rhino; assign the dynamic predicate
+    // to the separate visibility field instead of calling the Java helper.
+    mobileControls.visibility = boolp(function(){
         return Vars.state != null
-            && Vars.state.isGame()
-            && Vars.net != null
-            && !Vars.net.active();
-    }));
+            && Vars.state.isGame();
+    });
     mobileControls.bottom().right();
 
     mobileControls.table(Tex.pane, function(controls){
@@ -70,6 +73,12 @@ function handleInput(){
 }
 
 function changeSpeed(direction){
+    if(Vars.net != null && Vars.net.active()){
+        if(Vars.ui != null && Vars.ui.hudfrag != null){
+            Vars.ui.hudfrag.showToast("Time Scale is disabled in multiplayer");
+        }
+        return;
+    }
     const index = speedIndex();
     const next = Mathf.clamp(index + direction, 0, SPEEDS.length - 1);
     setSpeed(SPEEDS[next], true);
