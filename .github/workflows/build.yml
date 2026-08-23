@@ -14,22 +14,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '9.0.0'
-
-      - name: Build JAR
-        run: gradle jar --no-daemon
+      - name: Validate iOS script mod
+        shell: bash
+        run: |
+          test -f mod.hjson
+          test -f scripts/main.js
+          grep -q 'iosCompatible: true' mod.hjson
+          if grep -Eq 'extend\(|JavaAdapter' scripts/main.js; then
+            echo 'iOS-incompatible scripting API found.'
+            exit 1
+          fi
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mindustry-timescale
-          path: build/libs/mindustry-timescale.jar
+          name: mindustry-timescale-script
+          path: |
+            mod.hjson
+            scripts/main.js
