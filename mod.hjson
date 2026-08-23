@@ -1,0 +1,8 @@
+displayName: "Time Scale"
+name: "mindustry-timescale"
+author: "awind"
+main: "mindustrytimescale.TimeScaleMod"
+description: "Adjust the simulation speed in single-player worlds."
+version: 0.1.0
+minGameVersion: 159
+java: true

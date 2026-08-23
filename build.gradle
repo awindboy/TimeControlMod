@@ -1,0 +1,44 @@
+plugins {
+    id 'java'
+}
+
+sourceSets.main.java.srcDirs = ['src']
+
+repositories {
+    mavenCentral()
+
+    // Mindustry publishes a compile-time dependency JAR with each release.
+    ivy {
+        url = 'https://github.com/'
+        patternLayout {
+            artifact '/[organisation]/[module]/releases/download/[revision]/dependencies.jar'
+        }
+        metadataSources { artifact() }
+    }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+ext {
+    mindustryVersion = 'v159.7'
+}
+
+dependencies {
+    // Mindustry provides these classes at runtime; do not bundle them.
+    compileOnly "Anuken:Mindustry:${mindustryVersion}"
+}
+
+jar {
+    archiveFileName = "${project.name}.jar"
+
+    from(projectDir) {
+        include 'mod.hjson'
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
