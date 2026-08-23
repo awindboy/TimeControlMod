@@ -33,4 +33,4 @@ mod.hjson
 scripts/main.js
 ```
 
-기존 Java 구현은 `src/mindustrytimescale/TimeScaleMod.java`에 보존되어 있으며, `v0.1.1` 릴리스는 데스크톱/Android용 Java 모드입니다. 현재 기본 브랜치는 iPad 사용을 위한 스크립트 버전입니다.
+기존 Java 모드는 `v0.1.1` 릴리스에 남아 있으며, 현재 기본 브랜치는 iPad 사용을 위한 스크립트 버전입니다. 저장소의 Java 소스는 GitHub의 자동 언어 판별이 Java 모드로 오인하지 않도록 기본 브랜치에서 제외했습니다.
