@@ -1,6 +1,8 @@
 // iOS-compatible Mindustry script mod.
 
-const SETTING_SPEED = "mindustry-timescale-speed";
+// Store the selected preset as text. Rhino numbers are java.lang.Double, but
+// Mindustry settings only accept its supported boxed types.
+const SETTING_SPEED_INDEX = "mindustry-timescale-speed-index";
 const SPEEDS = [0.5, 1, 2, 4];
 const MIN_SPEED = SPEEDS[0];
 const MAX_SPEED = SPEEDS[SPEEDS.length - 1];
@@ -45,12 +47,12 @@ function buildMobileControls(){
     });
     mobileControls.bottom().right();
 
-    mobileControls.table(Tex.pane, function(controls){
-        controls.defaults().size(64);
+    mobileControls.table(Styles.black3, function(controls){
+        controls.defaults().height(48);
         controls.button("−", Styles.clearTogglet, run(function(){ changeSpeed(-1); }));
-        controls.label(prov(function(){ return formatSpeed() + "x"; })).center();
+        controls.label(prov(function(){ return formatSpeed() + "×"; })).width(60).center();
         controls.button("+", Styles.clearTogglet, run(function(){ changeSpeed(1); }));
-    }).padRight(12).padBottom(12);
+    }).pad(4).padRight(24).padBottom(88);
 
     // Add to the scene root so the overlay is above the normal HUD fragments.
     Core.scene.add(mobileControls);
@@ -88,20 +90,19 @@ function changeSpeed(direction){
 
 function setSpeed(value, notify){
     speed = Mathf.clamp(value, MIN_SPEED, MAX_SPEED);
-    Core.settings.put(SETTING_SPEED, speed);
+    Core.settings.put(SETTING_SPEED_INDEX, String(speedIndex()));
 
     if(notify && Vars.ui != null && Vars.ui.hudfrag != null){
-        Vars.ui.hudfrag.setHudText("[accent]Time Scale: " + formatSpeed() + "x[]");
-        Vars.ui.hudfrag.showToast("Time Scale: " + formatSpeed() + "x");
+        Vars.ui.hudfrag.setHudText("[accent]Time Scale: " + formatSpeed() + "×[]");
+        Vars.ui.hudfrag.showToast("Time Scale: " + formatSpeed() + "×");
     }
 }
 
 function readSpeed(){
-    const saved = Core.settings.getFloat(SETTING_SPEED, 1);
-    for(let i = 0; i < SPEEDS.length; i++){
-        if(Mathf.equal(saved, SPEEDS[i])) return SPEEDS[i];
-    }
-    return 1;
+    const parsed = parseInt(Core.settings.getString(SETTING_SPEED_INDEX, "1"), 10);
+    if(!isFinite(parsed)) return 1;
+    const index = Math.max(0, Math.min(SPEEDS.length - 1, parsed));
+    return SPEEDS[index];
 }
 
 function speedIndex(){
