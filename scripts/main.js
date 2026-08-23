@@ -31,7 +31,7 @@ Events.on(ClientLoadEvent, cons(function(){
 }));
 
 function buildMobileControls(){
-    if(Vars.headless || Vars.ui == null || Vars.ui.hudGroup == null || mobileControls != null) return;
+    if(Vars.headless || Vars.ui == null || Core.scene == null || mobileControls != null) return;
 
     mobileControls = new Table();
     mobileControls.name = "mindustry-timescale-controls";
@@ -52,7 +52,9 @@ function buildMobileControls(){
         controls.button("+", Styles.clearTogglet, run(function(){ changeSpeed(1); }));
     }).padRight(12).padBottom(12);
 
-    Vars.ui.hudGroup.addChild(mobileControls);
+    // Add to the scene root so the overlay is above the normal HUD fragments.
+    Core.scene.add(mobileControls);
+    mobileControls.toFront();
 }
 
 function handleInput(){
