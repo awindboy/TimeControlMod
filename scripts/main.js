@@ -9,6 +9,7 @@ const MAX_SPEED = SPEEDS[SPEEDS.length - 1];
 
 let speed = readSpeed();
 let mobileControls = null;
+let mobileSpeedButton = null;
 
 // Keep the normal frame-time calculation and multiply only local gameplay time.
 Time.setDeltaProvider(floatp(function(){
@@ -25,14 +26,43 @@ Time.setDeltaProvider(floatp(function(){
 
 Events.run(Trigger.update, run(function(){
     // UI may be initialized after scripts on some mobile builds; retry lazily.
-    if(mobileControls == null) buildMobileControls();
+    buildControls();
     handleInput();
 }));
 Events.on(ClientLoadEvent, cons(function(){
+    buildControls();
     print("Time Scale loaded. Speed: " + formatSpeed() + "x");
 }));
 
-function buildMobileControls(){
+function buildControls(){
+    if(Vars.mobile){
+        buildNativeMobileControl();
+    }else{
+        buildDesktopControls();
+    }
+}
+
+// On iOS, extend the HUD button row that Mindustry already creates instead of
+// adding a separate scene overlay. This survives mobile screen/layout changes.
+function buildNativeMobileControl(){
+    if(Vars.headless || Vars.ui == null || Core.scene == null) return;
+    if(mobileSpeedButton != null && mobileSpeedButton.parent != null) return;
+
+    mobileSpeedButton = null;
+    const nativeButtons = Core.scene.find("mobile buttons");
+    if(nativeButtons == null) return;
+
+    const cell = nativeButtons.button(formatSpeed() + "×", Styles.clearTogglet, run(function(){
+        cycleSpeed();
+    })).size(65);
+    cell.name("mindustry-timescale-speed");
+    mobileSpeedButton = cell.get();
+    mobileSpeedButton.update(run(function(){
+        mobileSpeedButton.setText(formatSpeed() + "×");
+    }));
+}
+
+function buildDesktopControls(){
     if(Vars.headless || Vars.ui == null || Core.scene == null || mobileControls != null) return;
 
     mobileControls = new Table();
@@ -85,6 +115,17 @@ function changeSpeed(direction){
     }
     const index = speedIndex();
     const next = Mathf.clamp(index + direction, 0, SPEEDS.length - 1);
+    setSpeed(SPEEDS[next], true);
+}
+
+function cycleSpeed(){
+    if(Vars.net != null && Vars.net.active()){
+        if(Vars.ui != null && Vars.ui.hudfrag != null){
+            Vars.ui.hudfrag.showToast("Time Scale is disabled in multiplayer");
+        }
+        return;
+    }
+    const next = (speedIndex() + 1) % SPEEDS.length;
     setSpeed(SPEEDS[next], true);
 }
 
