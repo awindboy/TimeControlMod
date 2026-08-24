@@ -17,18 +17,28 @@ let speed = readSpeed();
 let mobileControls = null;
 let speedBlocks = null;
 let needsBlockSync = true;
+let blockScanTimer = 0;
 
 // Keep the normal frame-time calculation and multiply only local gameplay time.
 Time.setDeltaProvider(floatp(function(){
-    let frameDelta = Core.graphics.getDeltaTime() * 60;
-    if(!isFinite(frameDelta) || frameDelta !== frameDelta) frameDelta = 1;
+    return scaledDelta();
+}));
 
-    const localWorld = Vars.state != null
-        && Vars.state.isPlaying()
-        && (Vars.net == null || !Vars.net.active());
+// Apply the value immediately before Mindustry updates the world. This is a
+// fallback for platforms where the Java Floatp provider is not refreshed in
+// the native frame loop, and also keeps the block state authoritative.
+Events.run(Trigger.beforeGameUpdate, run(function(){
+    if(Vars.state == null || !Vars.state.isPlaying()) return;
 
-    const multiplier = localWorld ? speed : 1;
-    return clampNumber(frameDelta * multiplier, 0.0001, Vars.maxDeltaClient);
+    if(++blockScanTimer >= 5 || needsBlockSync){
+        blockScanTimer = 0;
+        needsBlockSync = false;
+        updateBlockControl(false);
+    }
+
+    if(Vars.net == null || !Vars.net.active()){
+        Time.delta = scaledDelta();
+    }
 }));
 
 Events.run(Trigger.update, run(function(){
@@ -68,6 +78,18 @@ function loadSpeedBlocks(){
         // from Rhino can select the wrong overloaded Java method on iOS.
         speedBlocks.push({name: SPEED_BLOCK_NAMES[i], value: SPEEDS[i]});
     }
+}
+
+function scaledDelta(){
+    let frameDelta = Core.graphics.getDeltaTime() * 60;
+    if(!isFinite(frameDelta) || frameDelta !== frameDelta) frameDelta = 1;
+
+    const localWorld = Vars.state != null
+        && Vars.state.isPlaying()
+        && (Vars.net == null || !Vars.net.active());
+
+    const multiplier = localWorld ? speed : 1;
+    return clampNumber(frameDelta * multiplier, 0.0001, Vars.maxDeltaClient);
 }
 
 function speedBlockIndex(build){
