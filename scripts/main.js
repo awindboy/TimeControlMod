@@ -16,8 +16,7 @@ const SPEED_BLOCK_NAMES = [
 let speed = readSpeed();
 let mobileControls = null;
 let speedBlocks = null;
-let speedBlockScanTimer = 0;
-let hadActiveSpeedBlock = false;
+let needsBlockSync = true;
 
 // Keep the normal frame-time calculation and multiply only local gameplay time.
 Time.setDeltaProvider(floatp(function(){
@@ -29,14 +28,30 @@ Time.setDeltaProvider(floatp(function(){
         && (Vars.net == null || !Vars.net.active());
 
     const multiplier = localWorld ? speed : 1;
-    return Mathf.clamp(frameDelta * multiplier, 0.0001, Vars.maxDeltaClient);
+    return clampNumber(frameDelta * multiplier, 0.0001, Vars.maxDeltaClient);
 }));
 
 Events.run(Trigger.update, run(function(){
     // UI may be initialized after scripts on some mobile builds; retry lazily.
     buildControls();
     handleInput();
-    updateBlockControl();
+    if(needsBlockSync && Vars.state != null && Vars.state.isPlaying()){
+        needsBlockSync = false;
+        updateBlockControl(false);
+    }
+}));
+Events.on(ConfigEvent, cons(handleSpeedBlockConfig));
+Events.on(WorldLoadEvent, cons(function(){
+    needsBlockSync = true;
+}));
+Events.on(BlockBuildEndEvent, cons(function(){
+    needsBlockSync = true;
+}));
+Events.on(BlockDestroyEvent, cons(function(){
+    needsBlockSync = true;
+}));
+Events.on(StateChangeEvent, cons(function(){
+    needsBlockSync = true;
 }));
 Events.on(ClientLoadEvent, cons(function(){
     loadSpeedBlocks();
@@ -45,57 +60,78 @@ Events.on(ClientLoadEvent, cons(function(){
 }));
 
 function loadSpeedBlocks(){
-    if(speedBlocks != null || Vars.content == null) return;
+    if(speedBlocks != null) return;
 
     speedBlocks = [];
     for(let i = 0; i < SPEED_BLOCK_NAMES.length; i++){
-        const block = Vars.content.block(SPEED_BLOCK_NAMES[i]);
-        if(block == null){
-            speedBlocks = null;
-            return;
-        }
-        speedBlocks.push({block: block, value: SPEEDS[i]});
+        // Keep only plain JavaScript data here. Looking up ContentLoader.block
+        // from Rhino can select the wrong overloaded Java method on iOS.
+        speedBlocks.push({name: SPEED_BLOCK_NAMES[i], value: SPEEDS[i]});
     }
 }
 
-// The block itself is a vanilla SwitchBlock, so tapping it uses the normal
-// mobile block interaction. Polling only every few frames keeps this cheap on
-// large campaign maps and avoids adding any custom scene UI.
-function updateBlockControl(){
+function speedBlockIndex(build){
+    if(build == null || build.block == null) return -1;
+
+    const blockName = String(build.block.name);
+    for(let i = 0; i < SPEED_BLOCK_NAMES.length; i++){
+        if(blockName == speedBlocks[i].name){
+            return i;
+        }
+    }
+    return -1;
+}
+
+// SwitchBlock emits ConfigEvent after its enabled field has been updated.
+// Use that event for taps so mobile input does not depend on a per-frame scan.
+function handleSpeedBlockConfig(event){
+    if(speedBlocks == null) loadSpeedBlocks();
+    if(speedBlocks == null || event == null || event.tile == null) return;
+
+    const index = speedBlockIndex(event.tile);
+    if(index == -1) return;
+
+    if(Vars.net != null && Vars.net.active()){
+        if(!sameSpeed(speed, 1)) setSpeed(1, false);
+        return;
+    }
+
+    if(Vars.state == null || !Vars.state.isPlaying()){
+        needsBlockSync = true;
+        return;
+    }
+
+    if(event.tile.enabled == true){
+        needsBlockSync = false;
+        setSpeed(SPEEDS[index], !Vars.mobile);
+    }else{
+        updateBlockControl(!Vars.mobile);
+    }
+}
+
+// A scan is only needed when a world/building changes or a speed block is
+// switched off, so this remains cheap on large campaign maps.
+function updateBlockControl(notify){
     if(speedBlocks == null) loadSpeedBlocks();
     if(speedBlocks == null || Vars.state == null || !Vars.state.isPlaying()) return;
 
     if(Vars.net != null && Vars.net.active()){
-        if(!Mathf.equal(speed, 1)) setSpeed(1, false);
+        if(!sameSpeed(speed, 1)) setSpeed(1, false);
         return;
     }
-
-    if(++speedBlockScanTimer < 10) return;
-    speedBlockScanTimer = 0;
 
     let activeIndex = -1;
     Groups.build.each(cons(function(build){
         if(activeIndex != -1) return;
 
-        for(let i = 0; i < speedBlocks.length; i++){
-            if(build.block != null
-                && String(build.block.name) == SPEED_BLOCK_NAMES[i]
-                && build.enabled == true){
-                activeIndex = i;
-                return;
-            }
+        const index = speedBlockIndex(build);
+        if(index != -1 && build.enabled == true){
+            activeIndex = index;
         }
     }));
 
-    if(activeIndex != -1){
-        hadActiveSpeedBlock = true;
-        if(!Mathf.equal(speed, speedBlocks[activeIndex].value)){
-            setSpeed(speedBlocks[activeIndex].value, true);
-        }
-    }else if(hadActiveSpeedBlock){
-        hadActiveSpeedBlock = false;
-        if(!Mathf.equal(speed, 1)) setSpeed(1, true);
-    }
+    const nextSpeed = activeIndex == -1 ? 1 : speedBlocks[activeIndex].value;
+    if(!sameSpeed(speed, nextSpeed)) setSpeed(nextSpeed, notify && !Vars.mobile);
 }
 
 function buildControls(){
@@ -156,7 +192,7 @@ function changeSpeed(direction){
         return;
     }
     const index = speedIndex();
-    const next = Mathf.clamp(index + direction, 0, SPEEDS.length - 1);
+    const next = clampNumber(index + direction, 0, SPEEDS.length - 1);
     setSpeed(SPEEDS[next], true);
 }
 
@@ -172,7 +208,7 @@ function cycleSpeed(){
 }
 
 function setSpeed(value, notify){
-    speed = Mathf.clamp(value, MIN_SPEED, MAX_SPEED);
+    speed = clampNumber(value, MIN_SPEED, MAX_SPEED);
     Core.settings.put(SETTING_SPEED_INDEX, String(speedIndex()));
 
     if(notify && Vars.ui != null && Vars.ui.hudfrag != null){
@@ -190,9 +226,17 @@ function readSpeed(){
 
 function speedIndex(){
     for(let i = 0; i < SPEEDS.length; i++){
-        if(Mathf.equal(speed, SPEEDS[i])) return i;
+        if(sameSpeed(speed, SPEEDS[i])) return i;
     }
     return 1;
+}
+
+function sameSpeed(a, b){
+    return Math.abs(a - b) < 0.0001;
+}
+
+function clampNumber(value, min, max){
+    return Math.max(min, Math.min(max, value));
 }
 
 function formatSpeed(){
