@@ -6,14 +6,20 @@
 var ts = {};
 
 ts.speed = 1;
-ts.speeds = [0.5, 1, 2, 4];
+ts.speeds = [0.5, 1, 2, 4, 10];
 ts.settingKey = "mindustry-timescale-speed-index";
 ts.desktopControls = null;
+ts.mobileControls = null;
+ts.mobilePanel = null;
+ts.mobileSpeedIndex = 1;
 ts.scanTick = 0;
 ts.scanIndex = 0;
 ts.scanBuild = null;
 ts.scanBlockName = "";
 ts.nextSpeed = 1;
+ts.blockFound = false;
+ts.blockControlActive = false;
+ts.lastBlockSpeed = 1;
 
 // The iOS path is deliberately self-contained. Do not route these callbacks
 // through local registration helpers: Mindustry 159.7 runs Rhino with the
@@ -21,14 +27,72 @@ ts.nextSpeed = 1;
 if(Vars.ios){
     Events.on(ClientLoadEvent, () => {
         ts.speed = 1;
+        ts.mobileSpeedIndex = 1;
+
+        if(Core.scene != null && ts.mobileControls == null){
+            ts.mobileControls = new Table();
+            ts.mobileControls.name = "mindustry-timescale-mobile-controls";
+            ts.mobileControls.setFillParent(true);
+            ts.mobileControls.touchable = Touchable.childrenOnly;
+            ts.mobileControls.visibility = () => Vars.state != null
+                && Vars.state.isGame()
+                && Vars.ui != null
+                && Vars.ui.hudfrag != null
+                && Vars.ui.hudfrag.shown == true;
+            ts.mobileControls.top().left();
+            // Scene.root already excludes safe-area margins. The native mobile
+            // toolbar is exactly 65 UI units high, so this starts below it.
+            ts.mobileControls.marginTop(65);
+
+            ts.mobilePanel = new Table(Styles.black6);
+            ts.mobilePanel.name = "mindustry-timescale-mobile-panel";
+            ts.mobilePanel.left();
+            ts.mobilePanel.defaults().height(52);
+
+            ts.mobilePanel.button("◀", Styles.clearTogglet, () => {
+                if(Vars.net != null && Vars.net.active()){
+                    ts.speed = 1;
+                    ts.mobileSpeedIndex = 1;
+                    Vars.ui.hudfrag.showToast("Time Scale is disabled in multiplayer");
+                    return;
+                }
+                ts.mobileSpeedIndex = ts.mobileSpeedIndex - 1;
+                if(ts.mobileSpeedIndex < 0) ts.mobileSpeedIndex = ts.speeds.length - 1;
+                ts.speed = ts.speeds[ts.mobileSpeedIndex];
+            }).size(52).name("mindustry-timescale-left");
+
+            ts.mobilePanel.label(() => ts.speed + "×")
+                .style(Styles.outlineLabel).width(70).center()
+                .name("mindustry-timescale-value");
+
+            ts.mobilePanel.button("▶", Styles.clearTogglet, () => {
+                if(Vars.net != null && Vars.net.active()){
+                    ts.speed = 1;
+                    ts.mobileSpeedIndex = 1;
+                    Vars.ui.hudfrag.showToast("Time Scale is disabled in multiplayer");
+                    return;
+                }
+                ts.mobileSpeedIndex = ts.mobileSpeedIndex + 1;
+                if(ts.mobileSpeedIndex >= ts.speeds.length) ts.mobileSpeedIndex = 0;
+                ts.speed = ts.speeds[ts.mobileSpeedIndex];
+            }).size(52).name("mindustry-timescale-right");
+
+            ts.mobileControls.add(ts.mobilePanel).left();
+            Core.scene.add(ts.mobileControls);
+            ts.mobileControls.toFront();
+        }
+
         if(Vars.ui != null && Vars.ui.hudfrag != null){
-            Vars.ui.hudfrag.showToast("[accent]Time Scale v0.5.10[] loaded");
+            Vars.ui.hudfrag.showToast("[accent]Time Scale v0.6.0[] loaded");
         }
     });
 
     Events.on(WorldLoadEvent, () => {
         ts.speed = 1;
+        ts.mobileSpeedIndex = 1;
         ts.scanTick = 0;
+        ts.blockControlActive = false;
+        ts.lastBlockSpeed = 1;
         if(Vars.ui != null && Vars.ui.hudfrag != null){
             Vars.ui.hudfrag.showToast("[accent]Time Scale:[] ready - tap a Time Scale block");
         }
@@ -53,6 +117,7 @@ if(Vars.ios){
         ts.scanTick = 0;
         ts.scanIndex = 0;
         ts.nextSpeed = 1;
+        ts.blockFound = false;
 
         while(ts.scanIndex < Groups.build.size()){
             ts.scanBuild = Groups.build.index(ts.scanIndex);
@@ -60,25 +125,43 @@ if(Vars.ios){
                 ts.scanBlockName = ts.scanBuild.block.name + "";
                 if(ts.scanBlockName == "mindustry-timescale-time-scale-half"){
                     ts.nextSpeed = 0.5;
+                    ts.blockFound = true;
                     break;
                 }else if(ts.scanBlockName == "mindustry-timescale-time-scale-normal"){
                     ts.nextSpeed = 1;
+                    ts.blockFound = true;
                     break;
                 }else if(ts.scanBlockName == "mindustry-timescale-time-scale-double"){
                     ts.nextSpeed = 2;
+                    ts.blockFound = true;
                     break;
                 }else if(ts.scanBlockName == "mindustry-timescale-time-scale-quad"){
                     ts.nextSpeed = 4;
+                    ts.blockFound = true;
                     break;
                 }
             }
             ts.scanIndex = ts.scanIndex + 1;
         }
 
-        if(ts.speed != ts.nextSpeed){
+        if(ts.blockFound && (!ts.blockControlActive || ts.nextSpeed != ts.lastBlockSpeed)){
             ts.speed = ts.nextSpeed;
+            ts.blockControlActive = true;
+            ts.lastBlockSpeed = ts.nextSpeed;
+            if(ts.speed == 0.5) ts.mobileSpeedIndex = 0;
+            if(ts.speed == 1) ts.mobileSpeedIndex = 1;
+            if(ts.speed == 2) ts.mobileSpeedIndex = 2;
+            if(ts.speed == 4) ts.mobileSpeedIndex = 3;
             if(Vars.ui != null && Vars.ui.hudfrag != null){
                 Vars.ui.hudfrag.showToast("[accent]Time Scale:[] " + ts.speed + "×");
+            }
+        }else if(!ts.blockFound && ts.blockControlActive){
+            ts.speed = 1;
+            ts.mobileSpeedIndex = 1;
+            ts.blockControlActive = false;
+            ts.lastBlockSpeed = 1;
+            if(Vars.ui != null && Vars.ui.hudfrag != null){
+                Vars.ui.hudfrag.showToast("[accent]Time Scale:[] 1×");
             }
         }
         Time.delta = Time.delta * ts.speed;
@@ -89,7 +172,7 @@ if(Vars.ios){
     Events.on(ClientLoadEvent, function(event){
         ts.speed = ts.readSpeed();
         ts.buildDesktopControls();
-        ts.showToast("[accent]Time Scale v0.5.10[] loaded");
+        ts.showToast("[accent]Time Scale v0.6.0[] loaded");
     });
 
     Events.on(WorldLoadEvent, function(event){
