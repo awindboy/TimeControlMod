@@ -1,7 +1,5 @@
 // iOS-compatible Mindustry script mod.
 
-print("[Time Scale probe] main.js start");
-
 // Store the selected preset as text. Rhino numbers are java.lang.Double, but
 // Mindustry settings only accept its supported boxed types.
 const SETTING_SPEED_INDEX = "mindustry-timescale-speed-index";
@@ -16,7 +14,6 @@ const SPEED_BLOCK_NAMES = [
 ];
 
 let speed = readSpeed();
-print("[Time Scale probe] settings read");
 let mobileControls = null;
 let speedBlocks = null;
 let needsBlockSync = true;
@@ -30,27 +27,22 @@ let earlyDiagnosticShown = false;
 // Register this probe before any time-control API is touched. If a later
 // initialization call fails on iOS, this still proves whether main.js ran.
 if(DIAGNOSTIC_PROBE){
-    print("[Time Scale probe] before ClientLoadEvent");
     Events.on(ClientLoadEvent, function(){
         if(earlyDiagnosticShown || Vars.ui == null || Vars.ui.hudfrag == null) return;
 
         earlyDiagnosticShown = true;
         Vars.ui.hudfrag.showToast("[accent]Time Scale probe:[] main.js is running");
     });
-    print("[Time Scale probe] after ClientLoadEvent");
 }
 
 // Keep the normal frame-time calculation and multiply only local gameplay time.
-print("[Time Scale probe] before Time.setDeltaProvider");
 Time.setDeltaProvider(function(){
     return scaledDelta();
 });
-print("[Time Scale probe] after Time.setDeltaProvider");
 
 // Apply the value immediately before Mindustry updates the world. This is a
 // fallback for platforms where the Java Floatp provider is not refreshed in
 // the native frame loop, and also keeps the block state authoritative.
-print("[Time Scale probe] before beforeGameUpdate");
 Events.run(Trigger.beforeGameUpdate, function(){
     if(Vars.state == null || !Vars.state.isPlaying()) return;
 
@@ -64,9 +56,7 @@ Events.run(Trigger.beforeGameUpdate, function(){
         Time.delta = scaledDelta();
     }
 });
-print("[Time Scale probe] after beforeGameUpdate");
 
-print("[Time Scale probe] before update");
 Events.run(Trigger.update, function(){
     // UI may be initialized after scripts on some mobile builds; retry lazily.
     buildControls();
@@ -76,7 +66,6 @@ Events.run(Trigger.update, function(){
         updateBlockControl(false);
     }
 });
-print("[Time Scale probe] after update");
 Events.on(ConfigEvent, handleSpeedBlockConfig);
 Events.on(WorldLoadEvent, function(){
     needsBlockSync = true;
@@ -94,7 +83,6 @@ Events.on(StateChangeEvent, function(){
 Events.on(ClientLoadEvent, function(){
     loadSpeedBlocks();
     buildControls();
-    print("Time Scale loaded. Speed: " + formatSpeed() + "x");
 });
 
 function postDiagnosticToast(message){
@@ -133,7 +121,7 @@ function scaledDelta(){
 function speedBlockIndex(build){
     if(build == null || build.block == null) return -1;
 
-    const blockName = String(build.block.name);
+    const blockName = build.block.name + "";
     for(let i = 0; i < SPEED_BLOCK_NAMES.length; i++){
         if(blockName == speedBlocks[i].name){
             return i;
@@ -273,7 +261,7 @@ function cycleSpeed(){
 
 function setSpeed(value, notify){
     speed = clampNumber(value, MIN_SPEED, MAX_SPEED);
-    Core.settings.put(SETTING_SPEED_INDEX, String(speedIndex()));
+    Core.settings.put(SETTING_SPEED_INDEX, speedIndex() + "");
 
     if(notify && Vars.ui != null && Vars.ui.hudfrag != null){
         Vars.ui.hudfrag.setHudText("[accent]Time Scale: " + formatSpeed() + "×[]");
@@ -304,5 +292,5 @@ function clampNumber(value, min, max){
 }
 
 function formatSpeed(){
-    return speed === Math.floor(speed) ? String(Math.floor(speed)) : String(speed);
+    return speed === Math.floor(speed) ? Math.floor(speed) + "" : speed + "";
 }
