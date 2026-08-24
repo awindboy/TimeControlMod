@@ -18,6 +18,7 @@ import arc.scene.ui.Button.ButtonStyle;
 import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.Label;
 import arc.scene.ui.TextButton.TextButtonStyle;
+import arc.scene.ui.TextButton;
 import arc.scene.ui.layout.Table;
 import arc.util.Align;
 import arc.util.Time;
@@ -77,6 +78,7 @@ public final class RhinoIosProbe {
     public static final class HostStyles {
         public final BaseDrawable black6;
         public final TextButtonStyle clearTogglet;
+        public final TextButtonStyle cleart;
         public final LabelStyle outlineLabel;
 
         public HostStyles(BaseDrawable drawable, Font font) {
@@ -85,6 +87,11 @@ public final class RhinoIosProbe {
             clearTogglet.up = drawable;
             clearTogglet.down = drawable;
             clearTogglet.font = font;
+            cleart = new TextButtonStyle();
+            cleart.up = drawable;
+            cleart.down = drawable;
+            cleart.checked = null;
+            cleart.font = font;
             outlineLabel = new LabelStyle();
             outlineLabel.font = font;
         }
@@ -222,6 +229,11 @@ public final class RhinoIosProbe {
             Element right = controls.find("mindustry-timescale-right");
             Element value = controls.find("mindustry-timescale-value");
             require(left != null && right != null && value != null, "Missing mobile control element");
+            require(left instanceof TextButton && right instanceof TextButton,
+                "Mobile arrows are not text buttons");
+            require(((TextButton)left).getStyle().checked == null
+                && ((TextButton)right).getStyle().checked == null,
+                "Mobile arrows must not have a persistent checked-state drawable");
             require(controls.touchable == Touchable.childrenOnly, "Overlay should only intercept button touches");
             controls.updateVisibility();
             require(controls.visible, "Controls should be visible while the HUD is shown in game");
@@ -258,7 +270,7 @@ public final class RhinoIosProbe {
             Events.fire(HostTrigger.frame);
             require(Time.delta == 10f, "Left arrow did not wrap 0.5x to 10x");
 
-            require(hud.messages().contains("v0.6.1"), "Missing client-load toast: " + hud.messages());
+            require(hud.messages().contains("v0.6.2"), "Missing client-load toast: " + hud.messages());
             require(hud.messages().contains("ready"), "Missing world-load toast: " + hud.messages());
             System.out.println("iOS UI probe passed: marginLeft=329, centered label, Time.delta=" + Time.delta);
             System.out.println("Toasts: " + hud.messages());

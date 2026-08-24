@@ -2,6 +2,6 @@ displayName: "Time Scale"
 name: "mindustry-timescale"
 author: "awind"
 description: "Adjust the simulation speed in single-player worlds, including iOS."
-version: 0.6.1
+version: 0.6.2
 minGameVersion: 159
 iosCompatible: true

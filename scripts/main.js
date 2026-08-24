@@ -41,7 +41,7 @@ if(Vars.ios){
             ts.mobilePanel.left();
             ts.mobilePanel.defaults().height(52);
 
-            ts.mobilePanel.button("◀", Styles.clearTogglet, () => {
+            ts.mobilePanel.button("◀", Styles.cleart, () => {
                 if(Vars.net != null && Vars.net.active()){
                     ts.speed = 1;
                     ts.mobileSpeedIndex = 1;
@@ -57,7 +57,7 @@ if(Vars.ios){
                 .style(Styles.outlineLabel).width(70).labelAlign(Align.center)
                 .name("mindustry-timescale-value");
 
-            ts.mobilePanel.button("▶", Styles.clearTogglet, () => {
+            ts.mobilePanel.button("▶", Styles.cleart, () => {
                 if(Vars.net != null && Vars.net.active()){
                     ts.speed = 1;
                     ts.mobileSpeedIndex = 1;
@@ -75,7 +75,7 @@ if(Vars.ios){
         }
 
         if(Vars.ui != null && Vars.ui.hudfrag != null){
-            Vars.ui.hudfrag.showToast("[accent]Time Scale v0.6.1[] loaded");
+            Vars.ui.hudfrag.showToast("[accent]Time Scale v0.6.2[] loaded");
         }
     });
 
@@ -101,7 +101,7 @@ if(Vars.ios){
     Events.on(ClientLoadEvent, function(event){
         ts.speed = ts.readSpeed();
         ts.buildDesktopControls();
-        ts.showToast("[accent]Time Scale v0.6.1[] loaded");
+        ts.showToast("[accent]Time Scale v0.6.2[] loaded");
     });
 
     Events.on(WorldLoadEvent, function(event){
