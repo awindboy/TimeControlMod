@@ -27,27 +27,23 @@ let earlyDiagnosticShown = false;
 // Register this probe before any time-control API is touched. If a later
 // initialization call fails on iOS, this still proves whether main.js ran.
 if(DIAGNOSTIC_PROBE){
-    Events.run(Trigger.update, run(function(){
-        if(earlyDiagnosticShown
-            || Vars.state == null
-            || !Vars.state.isPlaying()
-            || Vars.ui == null
-            || Vars.ui.hudfrag == null) return;
+    Events.on(ClientLoadEvent, function(){
+        if(earlyDiagnosticShown || Vars.ui == null || Vars.ui.hudfrag == null) return;
 
         earlyDiagnosticShown = true;
         Vars.ui.hudfrag.showToast("[accent]Time Scale probe:[] main.js is running");
-    }));
+    });
 }
 
 // Keep the normal frame-time calculation and multiply only local gameplay time.
-Time.setDeltaProvider(floatp(function(){
+Time.setDeltaProvider(function(){
     return scaledDelta();
-}));
+});
 
 // Apply the value immediately before Mindustry updates the world. This is a
 // fallback for platforms where the Java Floatp provider is not refreshed in
 // the native frame loop, and also keeps the block state authoritative.
-Events.run(Trigger.beforeGameUpdate, run(function(){
+Events.run(Trigger.beforeGameUpdate, function(){
     if(Vars.state == null || !Vars.state.isPlaying()) return;
 
     if(++blockScanTimer >= 5 || needsBlockSync){
@@ -59,9 +55,9 @@ Events.run(Trigger.beforeGameUpdate, run(function(){
     if(Vars.net == null || !Vars.net.active()){
         Time.delta = scaledDelta();
     }
-}));
+});
 
-Events.run(Trigger.update, run(function(){
+Events.run(Trigger.update, function(){
     // UI may be initialized after scripts on some mobile builds; retry lazily.
     buildControls();
     handleInput();
@@ -69,35 +65,35 @@ Events.run(Trigger.update, run(function(){
         needsBlockSync = false;
         updateBlockControl(false);
     }
-}));
-Events.on(ConfigEvent, cons(handleSpeedBlockConfig));
-Events.on(WorldLoadEvent, cons(function(){
+});
+Events.on(ConfigEvent, handleSpeedBlockConfig);
+Events.on(WorldLoadEvent, function(){
     needsBlockSync = true;
     if(DIAGNOSTIC_PROBE) postDiagnosticToast("Time Scale script active");
-}));
-Events.on(BlockBuildEndEvent, cons(function(){
+});
+Events.on(BlockBuildEndEvent, function(){
     needsBlockSync = true;
-}));
-Events.on(BlockDestroyEvent, cons(function(){
+});
+Events.on(BlockDestroyEvent, function(){
     needsBlockSync = true;
-}));
-Events.on(StateChangeEvent, cons(function(){
+});
+Events.on(StateChangeEvent, function(){
     needsBlockSync = true;
-}));
-Events.on(ClientLoadEvent, cons(function(){
+});
+Events.on(ClientLoadEvent, function(){
     loadSpeedBlocks();
     buildControls();
     print("Time Scale loaded. Speed: " + formatSpeed() + "x");
-}));
+});
 
 function postDiagnosticToast(message){
     if(Vars.ui == null || Vars.ui.hudfrag == null) return;
 
-    Core.app.post(run(function(){
+    Core.app.post(function(){
         if(Vars.ui != null && Vars.ui.hudfrag != null){
             Vars.ui.hudfrag.showToast("[accent]Time Scale:[] " + message);
         }
-    }));
+    });
 }
 
 function loadSpeedBlocks(){
@@ -178,14 +174,14 @@ function updateBlockControl(notify){
     }
 
     let activeIndex = -1;
-    Groups.build.each(cons(function(build){
+    Groups.build.each(function(build){
         if(activeIndex != -1) return;
 
         const index = speedBlockIndex(build);
         if(index != -1 && build.enabled == true){
             activeIndex = index;
         }
-    }));
+    });
 
     const nextSpeed = activeIndex == -1 ? 1 : speedBlocks[activeIndex].value;
     if(!sameSpeed(speed, nextSpeed)) setSpeed(nextSpeed, notify && !Vars.mobile);
@@ -206,17 +202,17 @@ function buildDesktopControls(){
     mobileControls.touchable = Touchable.childrenOnly;
     // Element.visible is a boolean field in Rhino; assign the dynamic predicate
     // to the separate visibility field instead of calling the Java helper.
-    mobileControls.visibility = boolp(function(){
+    mobileControls.visibility = function(){
         return Vars.state != null
             && Vars.state.isGame();
-    });
+    };
     mobileControls.bottom().right();
 
     mobileControls.table(Styles.black3, function(controls){
         controls.defaults().height(48);
-        controls.button("−", Styles.clearTogglet, run(function(){ changeSpeed(-1); }));
-        controls.label(prov(function(){ return formatSpeed() + "×"; })).width(60).center();
-        controls.button("+", Styles.clearTogglet, run(function(){ changeSpeed(1); }));
+        controls.button("−", Styles.clearTogglet, function(){ changeSpeed(-1); });
+        controls.label(function(){ return formatSpeed() + "×"; }).width(60).center();
+        controls.button("+", Styles.clearTogglet, function(){ changeSpeed(1); });
     }).pad(4).padRight(24).padBottom(88);
 
     // Add to the scene root so the overlay is above the normal HUD fragments.
