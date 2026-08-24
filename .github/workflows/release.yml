@@ -43,10 +43,14 @@ jobs:
           curl --fail --location --retry 3 \
             --output build/rhino-probe/rhino.jar \
             https://jitpack.io/com/github/Anuken/rhino/e74ac129d2bff72c1deb536d7d99a0dbb7046d2e/rhino-e74ac129d2bff72c1deb536d7d99a0dbb7046d2e.jar
+          curl --fail --location --retry 3 \
+            --output build/rhino-probe/arc-core.jar \
+            https://jitpack.io/com/github/Anuken/Arc/arc-core/208a754044/arc-core-208a754044.jar
           echo '891be180aceaa22ffc54c9a488ce626c650bbfa7b4ec0f7c7bc428301e9744e4  build/rhino-probe/rhino.jar' | sha256sum --check
-          javac -encoding UTF-8 -cp build/rhino-probe/rhino.jar \
+          echo '1f74ac433ce7cc116c7666a94928f7e2b102495b483473841cc6003d9e780055  build/rhino-probe/arc-core.jar' | sha256sum --check
+          javac -encoding UTF-8 -cp build/rhino-probe/rhino.jar:build/rhino-probe/arc-core.jar \
             -d build/rhino-probe/classes tests/RhinoIosProbe.java
-          java -cp build/rhino-probe/classes:build/rhino-probe/rhino.jar RhinoIosProbe
+          java -cp build/rhino-probe/classes:build/rhino-probe/rhino.jar:build/rhino-probe/arc-core.jar RhinoIosProbe
 
       - name: Package script mod
         run: zip -r mindustry-timescale-script.zip mod.hjson scripts content bundles README.md

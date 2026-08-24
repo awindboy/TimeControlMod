@@ -21,16 +21,14 @@ ts.nextSpeed = 1;
 if(Vars.ios){
     Events.on(ClientLoadEvent, () => {
         ts.speed = 1;
-        Time.timeScale = 1;
         if(Vars.ui != null && Vars.ui.hudfrag != null){
-            Vars.ui.hudfrag.showToast("[accent]Time Scale v0.5.9[] loaded");
+            Vars.ui.hudfrag.showToast("[accent]Time Scale v0.5.10[] loaded");
         }
     });
 
     Events.on(WorldLoadEvent, () => {
         ts.speed = 1;
         ts.scanTick = 0;
-        Time.timeScale = 1;
         if(Vars.ui != null && Vars.ui.hudfrag != null){
             Vars.ui.hudfrag.showToast("[accent]Time Scale:[] ready - tap a Time Scale block");
         }
@@ -43,13 +41,12 @@ if(Vars.ios){
         if(Vars.state == null || !Vars.state.isPlaying()) return;
         if(Vars.net != null && Vars.net.active()){
             ts.speed = 1;
-            Time.timeScale = 1;
             return;
         }
 
         ts.scanTick = ts.scanTick + 1;
         if(ts.scanTick < 10){
-            Time.timeScale = ts.speed;
+            Time.delta = Time.delta * ts.speed;
             return;
         }
 
@@ -84,7 +81,7 @@ if(Vars.ios){
                 Vars.ui.hudfrag.showToast("[accent]Time Scale:[] " + ts.speed + "×");
             }
         }
-        Time.timeScale = ts.speed;
+        Time.delta = Time.delta * ts.speed;
     });
 
 }else{
@@ -92,7 +89,7 @@ if(Vars.ios){
     Events.on(ClientLoadEvent, function(event){
         ts.speed = ts.readSpeed();
         ts.buildDesktopControls();
-        ts.showToast("[accent]Time Scale v0.5.9[] loaded");
+        ts.showToast("[accent]Time Scale v0.5.10[] loaded");
     });
 
     Events.on(WorldLoadEvent, function(event){
