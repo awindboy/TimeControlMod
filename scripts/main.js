@@ -12,14 +12,6 @@ ts.desktopControls = null;
 ts.mobileControls = null;
 ts.mobilePanel = null;
 ts.mobileSpeedIndex = 1;
-ts.scanTick = 0;
-ts.scanIndex = 0;
-ts.scanBuild = null;
-ts.scanBlockName = "";
-ts.nextSpeed = 1;
-ts.blockFound = false;
-ts.blockControlActive = false;
-ts.lastBlockSpeed = 1;
 
 // The iOS path is deliberately self-contained. Do not route these callbacks
 // through local registration helpers: Mindustry 159.7 runs Rhino with the
@@ -41,8 +33,8 @@ if(Vars.ios){
                 && Vars.ui.hudfrag.shown == true;
             ts.mobileControls.top().left();
             // Scene.root already excludes safe-area margins. The native mobile
-            // toolbar is exactly 65 UI units high, so this starts below it.
-            ts.mobileControls.marginTop(65);
+            // toolbar contains five 65-unit buttons and a 4-unit divider.
+            ts.mobileControls.marginLeft(329);
 
             ts.mobilePanel = new Table(Styles.black6);
             ts.mobilePanel.name = "mindustry-timescale-mobile-panel";
@@ -62,7 +54,7 @@ if(Vars.ios){
             }).size(52).name("mindustry-timescale-left");
 
             ts.mobilePanel.label(() => ts.speed + "×")
-                .style(Styles.outlineLabel).width(70).center()
+                .style(Styles.outlineLabel).width(70).labelAlign(Align.center)
                 .name("mindustry-timescale-value");
 
             ts.mobilePanel.button("▶", Styles.clearTogglet, () => {
@@ -83,86 +75,23 @@ if(Vars.ios){
         }
 
         if(Vars.ui != null && Vars.ui.hudfrag != null){
-            Vars.ui.hudfrag.showToast("[accent]Time Scale v0.6.0[] loaded");
+            Vars.ui.hudfrag.showToast("[accent]Time Scale v0.6.1[] loaded");
         }
     });
 
     Events.on(WorldLoadEvent, () => {
         ts.speed = 1;
         ts.mobileSpeedIndex = 1;
-        ts.scanTick = 0;
-        ts.blockControlActive = false;
-        ts.lastBlockSpeed = 1;
         if(Vars.ui != null && Vars.ui.hudfrag != null){
-            Vars.ui.hudfrag.showToast("[accent]Time Scale:[] ready - tap a Time Scale block");
+            Vars.ui.hudfrag.showToast("[accent]Time Scale:[] ready");
         }
     });
 
-    // ConfigEvent passes an argument, which triggers a broken local-variable
-    // path in the iOS Rhino interpreter. Poll the existing building group by
-    // index instead; this uses no parameterized JavaScript callback at all.
     Events.run(Trigger.beforeGameUpdate, () => {
         if(Vars.state == null || !Vars.state.isPlaying()) return;
         if(Vars.net != null && Vars.net.active()){
             ts.speed = 1;
             return;
-        }
-
-        ts.scanTick = ts.scanTick + 1;
-        if(ts.scanTick < 10){
-            Time.delta = Time.delta * ts.speed;
-            return;
-        }
-
-        ts.scanTick = 0;
-        ts.scanIndex = 0;
-        ts.nextSpeed = 1;
-        ts.blockFound = false;
-
-        while(ts.scanIndex < Groups.build.size()){
-            ts.scanBuild = Groups.build.index(ts.scanIndex);
-            if(ts.scanBuild != null && ts.scanBuild.block != null && ts.scanBuild.enabled == true){
-                ts.scanBlockName = ts.scanBuild.block.name + "";
-                if(ts.scanBlockName == "mindustry-timescale-time-scale-half"){
-                    ts.nextSpeed = 0.5;
-                    ts.blockFound = true;
-                    break;
-                }else if(ts.scanBlockName == "mindustry-timescale-time-scale-normal"){
-                    ts.nextSpeed = 1;
-                    ts.blockFound = true;
-                    break;
-                }else if(ts.scanBlockName == "mindustry-timescale-time-scale-double"){
-                    ts.nextSpeed = 2;
-                    ts.blockFound = true;
-                    break;
-                }else if(ts.scanBlockName == "mindustry-timescale-time-scale-quad"){
-                    ts.nextSpeed = 4;
-                    ts.blockFound = true;
-                    break;
-                }
-            }
-            ts.scanIndex = ts.scanIndex + 1;
-        }
-
-        if(ts.blockFound && (!ts.blockControlActive || ts.nextSpeed != ts.lastBlockSpeed)){
-            ts.speed = ts.nextSpeed;
-            ts.blockControlActive = true;
-            ts.lastBlockSpeed = ts.nextSpeed;
-            if(ts.speed == 0.5) ts.mobileSpeedIndex = 0;
-            if(ts.speed == 1) ts.mobileSpeedIndex = 1;
-            if(ts.speed == 2) ts.mobileSpeedIndex = 2;
-            if(ts.speed == 4) ts.mobileSpeedIndex = 3;
-            if(Vars.ui != null && Vars.ui.hudfrag != null){
-                Vars.ui.hudfrag.showToast("[accent]Time Scale:[] " + ts.speed + "×");
-            }
-        }else if(!ts.blockFound && ts.blockControlActive){
-            ts.speed = 1;
-            ts.mobileSpeedIndex = 1;
-            ts.blockControlActive = false;
-            ts.lastBlockSpeed = 1;
-            if(Vars.ui != null && Vars.ui.hudfrag != null){
-                Vars.ui.hudfrag.showToast("[accent]Time Scale:[] 1×");
-            }
         }
         Time.delta = Time.delta * ts.speed;
     });
@@ -172,15 +101,11 @@ if(Vars.ios){
     Events.on(ClientLoadEvent, function(event){
         ts.speed = ts.readSpeed();
         ts.buildDesktopControls();
-        ts.showToast("[accent]Time Scale v0.6.0[] loaded");
+        ts.showToast("[accent]Time Scale v0.6.1[] loaded");
     });
 
     Events.on(WorldLoadEvent, function(event){
         ts.showToast("[accent]Time Scale:[] ready");
-    });
-
-    Events.on(ConfigEvent, function(event){
-        ts.handleDesktopConfig(event);
     });
 
     Events.run(Trigger.beforeGameUpdate, function(){
@@ -222,31 +147,6 @@ ts.applyDesktopDelta = function(){
     if(Vars.state == null || !Vars.state.isPlaying()) return;
     if(Vars.net != null && Vars.net.active()) ts.speed = 1;
     Time.delta = ts.scaledDelta();
-};
-
-ts.handleDesktopConfig = function(event){
-    if(event == null || event.tile == null || event.tile.block == null) return;
-
-    var blockName = event.tile.block.name + "";
-    var selectedSpeed = 1;
-    if(blockName == "mindustry-timescale-time-scale-half"){
-        selectedSpeed = 0.5;
-    }else if(blockName == "mindustry-timescale-time-scale-normal"){
-        selectedSpeed = 1;
-    }else if(blockName == "mindustry-timescale-time-scale-double"){
-        selectedSpeed = 2;
-    }else if(blockName == "mindustry-timescale-time-scale-quad"){
-        selectedSpeed = 4;
-    }else{
-        return;
-    }
-
-    if(Vars.net != null && Vars.net.active()){
-        ts.setSpeed(1, true);
-        return;
-    }
-    if(Vars.state == null || !Vars.state.isPlaying()) return;
-    ts.setSpeed(event.tile.enabled == true ? selectedSpeed : 1, true);
 };
 
 ts.buildDesktopControls = function(){

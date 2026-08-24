@@ -53,7 +53,7 @@ jobs:
           java -cp build/rhino-probe/classes:build/rhino-probe/rhino.jar:build/rhino-probe/arc-core.jar RhinoIosProbe
 
       - name: Package script mod
-        run: zip -r mindustry-timescale-script.zip mod.hjson scripts content bundles README.md
+        run: zip -r mindustry-timescale-script.zip mod.hjson scripts README.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

@@ -19,6 +19,7 @@ import arc.scene.ui.Label.LabelStyle;
 import arc.scene.ui.Label;
 import arc.scene.ui.TextButton.TextButtonStyle;
 import arc.scene.ui.layout.Table;
+import arc.util.Align;
 import arc.util.Time;
 import rhino.Context;
 import rhino.ImporterTopLevel;
@@ -36,9 +37,6 @@ public final class RhinoIosProbe {
     }
 
     public static final class HostWorldLoadEvent {
-    }
-
-    public static final class HostConfigEvent {
     }
 
     public enum HostTrigger {
@@ -74,48 +72,6 @@ public final class RhinoIosProbe {
         public boolean active() {
             return false;
         }
-    }
-
-    public static final class HostBlock {
-        public final String name;
-
-        public HostBlock(String name) {
-            this.name = name;
-        }
-    }
-
-    public static final class HostBuild {
-        public HostBlock block;
-        public boolean enabled;
-
-        public HostBuild(String blockName, boolean enabled) {
-            this.block = new HostBlock(blockName);
-            this.enabled = enabled;
-        }
-    }
-
-    public static final class HostBuildGroup {
-        private final HostBuild[] builds = {
-            new HostBuild("copper-wall", true),
-            new HostBuild("mindustry-timescale-time-scale-double", false)
-        };
-
-        public int size() {
-            return builds.length;
-        }
-
-        public HostBuild index(int index) {
-            return builds[index];
-        }
-
-        public void setSpeedBlock(String blockName, boolean enabled) {
-            builds[1].block = new HostBlock(blockName);
-            builds[1].enabled = enabled;
-        }
-    }
-
-    public static final class HostGroups {
-        public static final HostBuildGroup build = new HostBuildGroup();
     }
 
     public static final class HostStyles {
@@ -206,18 +162,6 @@ public final class RhinoIosProbe {
             });
     }
 
-    private static void selectSpeed(String blockName, boolean enabled, float expected) {
-        HostGroups.build.setSpeedBlock(blockName, enabled);
-        for (int i = 0; i < 10; i++) {
-            // Time.updateGlobal() refreshes this value before beforeGameUpdate.
-            Time.delta = 1f;
-            Events.fire(HostTrigger.frame);
-        }
-        require(Time.delta == expected,
-            "Expected " + blockName + " enabled=" + enabled + " to set Time.delta=" + expected
-                + ", got " + Time.delta);
-    }
-
     public static void main(String[] args) throws Exception {
         Context context = Context.enter();
         context.setOptimizationLevel(-1);
@@ -241,10 +185,8 @@ public final class RhinoIosProbe {
 
             scope.put("Events", scope, new NativeJavaClass(scope, Events.class));
             scope.put("Time", scope, new NativeJavaClass(scope, Time.class));
-            scope.put("Groups", scope, new NativeJavaClass(scope, HostGroups.class));
             scope.put("ClientLoadEvent", scope, new NativeJavaClass(scope, HostClientLoadEvent.class));
             scope.put("WorldLoadEvent", scope, new NativeJavaClass(scope, HostWorldLoadEvent.class));
-            scope.put("ConfigEvent", scope, new NativeJavaClass(scope, HostConfigEvent.class));
             scope.put("TestTrigger", scope, new NativeJavaClass(scope, HostTrigger.class));
             scope.put("TestHud", scope, Context.javaToJS(hud, scope));
             scope.put("TestState", scope, Context.javaToJS(new HostState(), scope));
@@ -253,6 +195,7 @@ public final class RhinoIosProbe {
             scope.put("Core", scope, new NativeJavaClass(scope, Core.class));
             scope.put("Table", scope, new NativeJavaClass(scope, Table.class));
             scope.put("Touchable", scope, new NativeJavaClass(scope, Touchable.class));
+            scope.put("Align", scope, new NativeJavaClass(scope, Align.class));
 
             context.evaluateString(scope,
                 "var Vars={ios:true,mobile:true,headless:false,ui:{hudfrag:TestHud}," +
@@ -271,8 +214,10 @@ public final class RhinoIosProbe {
             Element controlsElement = Core.scene.find("mindustry-timescale-mobile-controls");
             require(controlsElement instanceof Table, "Mobile controls were not added to Core.scene");
             Table controls = (Table)controlsElement;
-            require(controls.getMarginTop() == 65f,
-                "Expected controls below the 65px mobile toolbar, marginTop=" + controls.getMarginTop());
+            require(controls.getMarginTop() == 0f,
+                "Controls should stay on the native toolbar row, marginTop=" + controls.getMarginTop());
+            require(controls.getMarginLeft() == 329f,
+                "Expected controls right of the 329-unit mobile toolbar, marginLeft=" + controls.getMarginLeft());
             Element left = controls.find("mindustry-timescale-left");
             Element right = controls.find("mindustry-timescale-right");
             Element value = controls.find("mindustry-timescale-value");
@@ -299,6 +244,8 @@ public final class RhinoIosProbe {
             Events.fire(HostTrigger.frame);
             require(Time.delta == 10f, "Right arrow did not advance 4x to 10x");
             require(value instanceof Label, "Center speed value is not a Label");
+            require(((Label)value).getLabelAlign() == Align.center,
+                "Center speed value is not center-aligned");
             value.act(0f);
             require(((Label)value).getText().toString().startsWith("10"),
                 "Center label did not update to 10x: " + ((Label)value).getText());
@@ -311,18 +258,9 @@ public final class RhinoIosProbe {
             Events.fire(HostTrigger.frame);
             require(Time.delta == 10f, "Left arrow did not wrap 0.5x to 10x");
 
-            Events.fire(new HostWorldLoadEvent());
-            selectSpeed("mindustry-timescale-time-scale-double", true, 2f);
-            selectSpeed("mindustry-timescale-time-scale-half", true, 0.5f);
-            selectSpeed("mindustry-timescale-time-scale-normal", true, 1f);
-            selectSpeed("mindustry-timescale-time-scale-quad", true, 4f);
-            selectSpeed("mindustry-timescale-time-scale-quad", false, 1f);
-
-            require(hud.messages().contains("v0.6.0"), "Missing client-load toast: " + hud.messages());
+            require(hud.messages().contains("v0.6.1"), "Missing client-load toast: " + hud.messages());
             require(hud.messages().contains("ready"), "Missing world-load toast: " + hud.messages());
-            require(hud.messages().contains("Time Scale:[] 2"), "Missing 2x toast: " + hud.messages());
-
-            System.out.println("iOS Rhino probe passed: Time.delta=" + Time.delta);
+            System.out.println("iOS UI probe passed: marginLeft=329, centered label, Time.delta=" + Time.delta);
             System.out.println("Toasts: " + hud.messages());
         } finally {
             Events.clear();

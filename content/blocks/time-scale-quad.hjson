@@ -1,8 +1,0 @@
-type: mindustry.world.blocks.logic.SwitchBlock
-name: time-scale-quad
-size: 1
-health: 50
-requirements: []
-category: logic
-buildVisibility: shown
-alwaysUnlocked: true
