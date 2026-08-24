@@ -24,6 +24,8 @@ awindboy/TimeControlMod
 
 이 버전은 Java JAR가 아니라 `scripts/main.js`를 사용하는 스크립트 모드입니다. iOS에서는 `extend()`와 `JavaAdapter`를 사용하지 않는 스크립트만 호환 대상으로 표시할 수 있습니다.
 
+`tests/`의 Java 파일은 iOS Rhino 호환성을 자동 검증하기 위한 테스트 대역일 뿐 모드에 포함되지 않으며, GitHub 언어 판정에서도 제외됩니다.
+
 ## 개발 기준
 
 - Mindustry `v8 Build 159.7`
