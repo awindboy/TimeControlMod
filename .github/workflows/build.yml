@@ -32,3 +32,5 @@ jobs:
           path: |
             mod.hjson
             scripts/main.js
+            content
+            bundles

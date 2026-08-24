@@ -27,7 +27,7 @@ jobs:
           fi
 
       - name: Package script mod
-        run: zip -r mindustry-timescale-script.zip mod.hjson scripts README.md
+        run: zip -r mindustry-timescale-script.zip mod.hjson scripts content bundles README.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

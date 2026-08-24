@@ -1,0 +1,8 @@
+type: mindustry.world.blocks.logic.SwitchBlock
+name: time-scale-normal
+size: 1
+health: 50
+requirements: []
+category: logic
+buildVisibility: shown
+alwaysUnlocked: true

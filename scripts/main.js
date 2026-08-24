@@ -6,11 +6,18 @@ const SETTING_SPEED_INDEX = "mindustry-timescale-speed-index";
 const SPEEDS = [0.5, 1, 2, 4];
 const MIN_SPEED = SPEEDS[0];
 const MAX_SPEED = SPEEDS[SPEEDS.length - 1];
+const SPEED_BLOCK_NAMES = [
+    "mindustry-timescale-time-scale-half",
+    "mindustry-timescale-time-scale-normal",
+    "mindustry-timescale-time-scale-double",
+    "mindustry-timescale-time-scale-quad"
+];
 
 let speed = readSpeed();
 let mobileControls = null;
-let pauseMenuSpeedButton = null;
-let pauseMenuHooked = false;
+let speedBlocks = null;
+let speedBlockScanTimer = 0;
+let hadActiveSpeedBlock = false;
 
 // Keep the normal frame-time calculation and multiply only local gameplay time.
 Time.setDeltaProvider(floatp(function(){
@@ -29,46 +36,70 @@ Events.run(Trigger.update, run(function(){
     // UI may be initialized after scripts on some mobile builds; retry lazily.
     buildControls();
     handleInput();
+    updateBlockControl();
 }));
 Events.on(ClientLoadEvent, cons(function(){
+    loadSpeedBlocks();
     buildControls();
     print("Time Scale loaded. Speed: " + formatSpeed() + "x");
 }));
 
-function buildControls(){
-    if(Vars.mobile){
-        buildNativePauseControl();
-    }else{
-        buildDesktopControls();
+function loadSpeedBlocks(){
+    if(speedBlocks != null || Vars.content == null) return;
+
+    speedBlocks = [];
+    for(let i = 0; i < SPEED_BLOCK_NAMES.length; i++){
+        const block = Vars.content.block(SPEED_BLOCK_NAMES[i]);
+        if(block == null){
+            speedBlocks = null;
+            return;
+        }
+        speedBlocks.push({block: block, value: SPEEDS[i]});
     }
 }
 
-// On iOS, add the control to Mindustry's existing pause/menu dialog. The
-// mobile HUD is rebuilt by the game and is not a stable extension point.
-function buildNativePauseControl(){
-    if(Vars.headless || Vars.ui == null || Vars.ui.paused == null || pauseMenuHooked) return;
+// The block itself is a vanilla SwitchBlock, so tapping it uses the normal
+// mobile block interaction. Polling only every few frames keeps this cheap on
+// large campaign maps and avoids adding any custom scene UI.
+function updateBlockControl(){
+    if(speedBlocks == null) loadSpeedBlocks();
+    if(speedBlocks == null || Vars.state == null || !Vars.state.isPlaying()) return;
 
-    Vars.ui.paused.shown(run(function(){
-        addPauseMenuControl();
+    if(Vars.net != null && Vars.net.active()){
+        if(!Mathf.equal(speed, 1)) setSpeed(1, false);
+        return;
+    }
+
+    if(++speedBlockScanTimer < 10) return;
+    speedBlockScanTimer = 0;
+
+    let activeIndex = -1;
+    Groups.build.each(cons(function(build){
+        if(activeIndex != -1) return;
+
+        for(let i = 0; i < speedBlocks.length; i++){
+            if(build.block == speedBlocks[i].block && build.config() == true){
+                activeIndex = i;
+                return;
+            }
+        }
     }));
-    pauseMenuHooked = true;
+
+    if(activeIndex != -1){
+        hadActiveSpeedBlock = true;
+        if(!Mathf.equal(speed, speedBlocks[activeIndex].value)){
+            setSpeed(speedBlocks[activeIndex].value, true);
+        }
+    }else if(hadActiveSpeedBlock){
+        hadActiveSpeedBlock = false;
+        if(!Mathf.equal(speed, 1)) setSpeed(1, true);
+    }
 }
 
-function addPauseMenuControl(){
-    if(Vars.ui == null || Vars.ui.paused == null || Vars.ui.paused.cont == null) return;
-    if(pauseMenuSpeedButton != null && pauseMenuSpeedButton.parent != null) return;
-
-    const menu = Vars.ui.paused.cont;
-    if(menu.find("mindustry-timescale-pause") != null) return;
-
-    const cell = menu.buttonRow("Time Scale: " + formatSpeed() + "×", Icon.play, run(function(){
-        cycleSpeed();
-    }));
-    cell.name("mindustry-timescale-pause");
-    pauseMenuSpeedButton = cell.get();
-    pauseMenuSpeedButton.update(run(function(){
-        pauseMenuSpeedButton.setText("Time Scale: " + formatSpeed() + "×");
-    }));
+function buildControls(){
+    if(!Vars.mobile){
+        buildDesktopControls();
+    }
 }
 
 function buildDesktopControls(){
