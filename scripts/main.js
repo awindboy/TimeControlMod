@@ -19,6 +19,10 @@ let speedBlocks = null;
 let needsBlockSync = true;
 let blockScanTimer = 0;
 
+// Temporary runtime probe for iOS diagnosis. Remove after confirming whether
+// main.js and ConfigEvent are reaching the iPad build.
+const DIAGNOSTIC_PROBE = true;
+
 // Keep the normal frame-time calculation and multiply only local gameplay time.
 Time.setDeltaProvider(floatp(function(){
     return scaledDelta();
@@ -53,6 +57,7 @@ Events.run(Trigger.update, run(function(){
 Events.on(ConfigEvent, cons(handleSpeedBlockConfig));
 Events.on(WorldLoadEvent, cons(function(){
     needsBlockSync = true;
+    if(DIAGNOSTIC_PROBE) postDiagnosticToast("Time Scale script active");
 }));
 Events.on(BlockBuildEndEvent, cons(function(){
     needsBlockSync = true;
@@ -68,6 +73,16 @@ Events.on(ClientLoadEvent, cons(function(){
     buildControls();
     print("Time Scale loaded. Speed: " + formatSpeed() + "x");
 }));
+
+function postDiagnosticToast(message){
+    if(Vars.ui == null || Vars.ui.hudfrag == null) return;
+
+    Core.app.post(run(function(){
+        if(Vars.ui != null && Vars.ui.hudfrag != null){
+            Vars.ui.hudfrag.showToast("[accent]Time Scale:[] " + message);
+        }
+    }));
+}
 
 function loadSpeedBlocks(){
     if(speedBlocks != null) return;
@@ -112,6 +127,10 @@ function handleSpeedBlockConfig(event){
 
     const index = speedBlockIndex(event.tile);
     if(index == -1) return;
+
+    if(DIAGNOSTIC_PROBE){
+        postDiagnosticToast("block event received");
+    }
 
     if(Vars.net != null && Vars.net.active()){
         if(!sameSpeed(speed, 1)) setSpeed(1, false);
