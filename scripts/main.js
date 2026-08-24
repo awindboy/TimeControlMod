@@ -78,7 +78,9 @@ function updateBlockControl(){
         if(activeIndex != -1) return;
 
         for(let i = 0; i < speedBlocks.length; i++){
-            if(build.block == speedBlocks[i].block && build.config() == true){
+            if(build.block != null
+                && String(build.block.name) == SPEED_BLOCK_NAMES[i]
+                && build.enabled == true){
                 activeIndex = i;
                 return;
             }
