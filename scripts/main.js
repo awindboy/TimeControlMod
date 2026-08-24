@@ -22,6 +22,22 @@ let blockScanTimer = 0;
 // Temporary runtime probe for iOS diagnosis. Remove after confirming whether
 // main.js and ConfigEvent are reaching the iPad build.
 const DIAGNOSTIC_PROBE = true;
+let earlyDiagnosticShown = false;
+
+// Register this probe before any time-control API is touched. If a later
+// initialization call fails on iOS, this still proves whether main.js ran.
+if(DIAGNOSTIC_PROBE){
+    Events.run(Trigger.update, run(function(){
+        if(earlyDiagnosticShown
+            || Vars.state == null
+            || !Vars.state.isPlaying()
+            || Vars.ui == null
+            || Vars.ui.hudfrag == null) return;
+
+        earlyDiagnosticShown = true;
+        Vars.ui.hudfrag.showToast("[accent]Time Scale probe:[] main.js is running");
+    }));
+}
 
 // Keep the normal frame-time calculation and multiply only local gameplay time.
 Time.setDeltaProvider(floatp(function(){
