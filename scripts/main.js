@@ -1,296 +1,257 @@
-// iOS-compatible Mindustry script mod.
+// Mindustry wraps this file in a strict-mode function. Keep only one local
+// state object, and register iOS callbacks directly as the official examples
+// do. Extra wrapper/helper calls during startup can break in iOS interpreted
+// Rhino before any event listener is registered.
 
-// Store the selected preset as text. Rhino numbers are java.lang.Double, but
-// Mindustry settings only accept its supported boxed types.
-const SETTING_SPEED_INDEX = "mindustry-timescale-speed-index";
-const SPEEDS = [0.5, 1, 2, 4];
-const MIN_SPEED = SPEEDS[0];
-const MAX_SPEED = SPEEDS[SPEEDS.length - 1];
-const SPEED_BLOCK_NAMES = [
-    "mindustry-timescale-time-scale-half",
-    "mindustry-timescale-time-scale-normal",
-    "mindustry-timescale-time-scale-double",
-    "mindustry-timescale-time-scale-quad"
-];
+var ts = {};
 
-let speed = readSpeed();
-let mobileControls = null;
-let speedBlocks = null;
-let needsBlockSync = true;
-let blockScanTimer = 0;
+ts.speed = 1;
+ts.speeds = [0.5, 1, 2, 4];
+ts.settingKey = "mindustry-timescale-speed-index";
+ts.desktopControls = null;
+ts.scanTick = 0;
+ts.scanIndex = 0;
+ts.scanBuild = null;
+ts.scanBlockName = "";
+ts.nextSpeed = 1;
 
-// Temporary runtime probe for iOS diagnosis. Remove after confirming whether
-// main.js and ConfigEvent are reaching the iPad build.
-const DIAGNOSTIC_PROBE = true;
-let earlyDiagnosticShown = false;
-
-// Register this probe before any time-control API is touched. If a later
-// initialization call fails on iOS, this still proves whether main.js ran.
-if(DIAGNOSTIC_PROBE){
-    Events.on(ClientLoadEvent, function(){
-        if(earlyDiagnosticShown || Vars.ui == null || Vars.ui.hudfrag == null) return;
-
-        earlyDiagnosticShown = true;
-        Vars.ui.hudfrag.showToast("[accent]Time Scale probe:[] main.js is running");
-    });
-}
-
-// Keep the normal frame-time calculation and multiply only local gameplay time.
-Time.setDeltaProvider(function(){
-    return scaledDelta();
-});
-
-// Apply the value immediately before Mindustry updates the world. This is a
-// fallback for platforms where the Java Floatp provider is not refreshed in
-// the native frame loop, and also keeps the block state authoritative.
-Events.run(Trigger.beforeGameUpdate, function(){
-    if(Vars.state == null || !Vars.state.isPlaying()) return;
-
-    if(++blockScanTimer >= 5 || needsBlockSync){
-        blockScanTimer = 0;
-        needsBlockSync = false;
-        updateBlockControl(false);
-    }
-
-    if(Vars.net == null || !Vars.net.active()){
-        Time.delta = scaledDelta();
-    }
-});
-
-Events.run(Trigger.update, function(){
-    // UI may be initialized after scripts on some mobile builds; retry lazily.
-    buildControls();
-    handleInput();
-    if(needsBlockSync && Vars.state != null && Vars.state.isPlaying()){
-        needsBlockSync = false;
-        updateBlockControl(false);
-    }
-});
-Events.on(ConfigEvent, handleSpeedBlockConfig);
-Events.on(WorldLoadEvent, function(){
-    needsBlockSync = true;
-    if(DIAGNOSTIC_PROBE) postDiagnosticToast("Time Scale script active");
-});
-Events.on(BlockBuildEndEvent, function(){
-    needsBlockSync = true;
-});
-Events.on(BlockDestroyEvent, function(){
-    needsBlockSync = true;
-});
-Events.on(StateChangeEvent, function(){
-    needsBlockSync = true;
-});
-Events.on(ClientLoadEvent, function(){
-    loadSpeedBlocks();
-    buildControls();
-});
-
-function postDiagnosticToast(message){
-    if(Vars.ui == null || Vars.ui.hudfrag == null) return;
-
-    Core.app.post(function(){
+// The iOS path is deliberately self-contained. Do not route these callbacks
+// through local registration helpers: Mindustry 159.7 runs Rhino with the
+// interpreter enabled on iOS, and direct Java interface conversion is stable.
+if(Vars.ios){
+    Events.on(ClientLoadEvent, () => {
+        ts.speed = 1;
+        Time.timeScale = 1;
         if(Vars.ui != null && Vars.ui.hudfrag != null){
-            Vars.ui.hudfrag.showToast("[accent]Time Scale:[] " + message);
+            Vars.ui.hudfrag.showToast("[accent]Time Scale v0.5.9[] loaded");
         }
+    });
+
+    Events.on(WorldLoadEvent, () => {
+        ts.speed = 1;
+        ts.scanTick = 0;
+        Time.timeScale = 1;
+        if(Vars.ui != null && Vars.ui.hudfrag != null){
+            Vars.ui.hudfrag.showToast("[accent]Time Scale:[] ready - tap a Time Scale block");
+        }
+    });
+
+    // ConfigEvent passes an argument, which triggers a broken local-variable
+    // path in the iOS Rhino interpreter. Poll the existing building group by
+    // index instead; this uses no parameterized JavaScript callback at all.
+    Events.run(Trigger.beforeGameUpdate, () => {
+        if(Vars.state == null || !Vars.state.isPlaying()) return;
+        if(Vars.net != null && Vars.net.active()){
+            ts.speed = 1;
+            Time.timeScale = 1;
+            return;
+        }
+
+        ts.scanTick = ts.scanTick + 1;
+        if(ts.scanTick < 10){
+            Time.timeScale = ts.speed;
+            return;
+        }
+
+        ts.scanTick = 0;
+        ts.scanIndex = 0;
+        ts.nextSpeed = 1;
+
+        while(ts.scanIndex < Groups.build.size()){
+            ts.scanBuild = Groups.build.index(ts.scanIndex);
+            if(ts.scanBuild != null && ts.scanBuild.block != null && ts.scanBuild.enabled == true){
+                ts.scanBlockName = ts.scanBuild.block.name + "";
+                if(ts.scanBlockName == "mindustry-timescale-time-scale-half"){
+                    ts.nextSpeed = 0.5;
+                    break;
+                }else if(ts.scanBlockName == "mindustry-timescale-time-scale-normal"){
+                    ts.nextSpeed = 1;
+                    break;
+                }else if(ts.scanBlockName == "mindustry-timescale-time-scale-double"){
+                    ts.nextSpeed = 2;
+                    break;
+                }else if(ts.scanBlockName == "mindustry-timescale-time-scale-quad"){
+                    ts.nextSpeed = 4;
+                    break;
+                }
+            }
+            ts.scanIndex = ts.scanIndex + 1;
+        }
+
+        if(ts.speed != ts.nextSpeed){
+            ts.speed = ts.nextSpeed;
+            if(Vars.ui != null && Vars.ui.hudfrag != null){
+                Vars.ui.hudfrag.showToast("[accent]Time Scale:[] " + ts.speed + "×");
+            }
+        }
+        Time.timeScale = ts.speed;
+    });
+
+}else{
+    // Desktop keeps the native-looking HUD controls and keyboard shortcuts.
+    Events.on(ClientLoadEvent, function(event){
+        ts.speed = ts.readSpeed();
+        ts.buildDesktopControls();
+        ts.showToast("[accent]Time Scale v0.5.9[] loaded");
+    });
+
+    Events.on(WorldLoadEvent, function(event){
+        ts.showToast("[accent]Time Scale:[] ready");
+    });
+
+    Events.on(ConfigEvent, function(event){
+        ts.handleDesktopConfig(event);
+    });
+
+    Events.run(Trigger.beforeGameUpdate, function(){
+        ts.applyDesktopDelta();
+    });
+
+    Events.run(Trigger.update, function(){
+        ts.buildDesktopControls();
+        ts.handleDesktopInput();
+    });
+
+    Time.setDeltaProvider(function(){
+        return ts.scaledDelta();
     });
 }
 
-function loadSpeedBlocks(){
-    if(speedBlocks != null) return;
-
-    speedBlocks = [];
-    for(let i = 0; i < SPEED_BLOCK_NAMES.length; i++){
-        // Keep only plain JavaScript data here. Looking up ContentLoader.block
-        // from Rhino can select the wrong overloaded Java method on iOS.
-        speedBlocks.push({name: SPEED_BLOCK_NAMES[i], value: SPEEDS[i]});
+ts.showToast = function(message){
+    if(Vars.ui != null && Vars.ui.hudfrag != null){
+        Vars.ui.hudfrag.showToast(message);
     }
-}
+};
 
-function scaledDelta(){
-    let frameDelta = Core.graphics.getDeltaTime() * 60;
-    if(!isFinite(frameDelta) || frameDelta !== frameDelta) frameDelta = 1;
+ts.scaledDelta = function(){
+    var frameDelta = Core.graphics.getDeltaTime() * 60;
+    if(frameDelta != frameDelta || frameDelta <= 0) frameDelta = 1;
 
-    const localWorld = Vars.state != null
-        && Vars.state.isPlaying()
-        && (Vars.net == null || !Vars.net.active());
-
-    const multiplier = localWorld ? speed : 1;
-    return clampNumber(frameDelta * multiplier, 0.0001, Vars.maxDeltaClient);
-}
-
-function speedBlockIndex(build){
-    if(build == null || build.block == null) return -1;
-
-    const blockName = build.block.name + "";
-    for(let i = 0; i < SPEED_BLOCK_NAMES.length; i++){
-        if(blockName == speedBlocks[i].name){
-            return i;
-        }
-    }
-    return -1;
-}
-
-// SwitchBlock emits ConfigEvent after its enabled field has been updated.
-// Use that event for taps so mobile input does not depend on a per-frame scan.
-function handleSpeedBlockConfig(event){
-    if(speedBlocks == null) loadSpeedBlocks();
-    if(speedBlocks == null || event == null || event.tile == null) return;
-
-    const index = speedBlockIndex(event.tile);
-    if(index == -1) return;
-
-    if(DIAGNOSTIC_PROBE){
-        postDiagnosticToast("block event received");
+    var multiplier = 1;
+    if(Vars.state != null && Vars.state.isPlaying() && (Vars.net == null || !Vars.net.active())){
+        multiplier = ts.speed;
     }
 
-    if(Vars.net != null && Vars.net.active()){
-        if(!sameSpeed(speed, 1)) setSpeed(1, false);
-        return;
-    }
+    var scaled = frameDelta * multiplier;
+    if(scaled < 0.0001) scaled = 0.0001;
+    if(scaled > Vars.maxDeltaClient) scaled = Vars.maxDeltaClient;
+    return scaled;
+};
 
-    if(Vars.state == null || !Vars.state.isPlaying()){
-        needsBlockSync = true;
-        return;
-    }
+ts.applyDesktopDelta = function(){
+    if(Vars.state == null || !Vars.state.isPlaying()) return;
+    if(Vars.net != null && Vars.net.active()) ts.speed = 1;
+    Time.delta = ts.scaledDelta();
+};
 
-    if(event.tile.enabled == true){
-        needsBlockSync = false;
-        setSpeed(SPEEDS[index], !Vars.mobile);
+ts.handleDesktopConfig = function(event){
+    if(event == null || event.tile == null || event.tile.block == null) return;
+
+    var blockName = event.tile.block.name + "";
+    var selectedSpeed = 1;
+    if(blockName == "mindustry-timescale-time-scale-half"){
+        selectedSpeed = 0.5;
+    }else if(blockName == "mindustry-timescale-time-scale-normal"){
+        selectedSpeed = 1;
+    }else if(blockName == "mindustry-timescale-time-scale-double"){
+        selectedSpeed = 2;
+    }else if(blockName == "mindustry-timescale-time-scale-quad"){
+        selectedSpeed = 4;
     }else{
-        updateBlockControl(!Vars.mobile);
-    }
-}
-
-// A scan is only needed when a world/building changes or a speed block is
-// switched off, so this remains cheap on large campaign maps.
-function updateBlockControl(notify){
-    if(speedBlocks == null) loadSpeedBlocks();
-    if(speedBlocks == null || Vars.state == null || !Vars.state.isPlaying()) return;
-
-    if(Vars.net != null && Vars.net.active()){
-        if(!sameSpeed(speed, 1)) setSpeed(1, false);
         return;
     }
 
-    let activeIndex = -1;
-    Groups.build.each(function(build){
-        if(activeIndex != -1) return;
-
-        const index = speedBlockIndex(build);
-        if(index != -1 && build.enabled == true){
-            activeIndex = index;
-        }
-    });
-
-    const nextSpeed = activeIndex == -1 ? 1 : speedBlocks[activeIndex].value;
-    if(!sameSpeed(speed, nextSpeed)) setSpeed(nextSpeed, notify && !Vars.mobile);
-}
-
-function buildControls(){
-    if(!Vars.mobile){
-        buildDesktopControls();
+    if(Vars.net != null && Vars.net.active()){
+        ts.setSpeed(1, true);
+        return;
     }
-}
+    if(Vars.state == null || !Vars.state.isPlaying()) return;
+    ts.setSpeed(event.tile.enabled == true ? selectedSpeed : 1, true);
+};
 
-function buildDesktopControls(){
-    if(Vars.headless || Vars.ui == null || Core.scene == null || mobileControls != null) return;
+ts.buildDesktopControls = function(){
+    if(Vars.headless || Vars.ui == null || Core.scene == null || ts.desktopControls != null) return;
 
-    mobileControls = new Table();
-    mobileControls.name = "mindustry-timescale-controls";
-    mobileControls.setFillParent(true);
-    mobileControls.touchable = Touchable.childrenOnly;
-    // Element.visible is a boolean field in Rhino; assign the dynamic predicate
-    // to the separate visibility field instead of calling the Java helper.
-    mobileControls.visibility = function(){
-        return Vars.state != null
-            && Vars.state.isGame();
+    ts.desktopControls = new Table();
+    ts.desktopControls.name = "mindustry-timescale-controls";
+    ts.desktopControls.setFillParent(true);
+    ts.desktopControls.touchable = Touchable.childrenOnly;
+    ts.desktopControls.visibility = function(){
+        return Vars.state != null && Vars.state.isGame();
     };
-    mobileControls.bottom().right();
+    ts.desktopControls.bottom().right();
 
-    mobileControls.table(Styles.black3, function(controls){
+    ts.desktopControls.table(Styles.black3, function(controls){
         controls.defaults().height(48);
-        controls.button("−", Styles.clearTogglet, function(){ changeSpeed(-1); });
-        controls.label(function(){ return formatSpeed() + "×"; }).width(60).center();
-        controls.button("+", Styles.clearTogglet, function(){ changeSpeed(1); });
+        controls.button("−", Styles.clearTogglet, function(){ ts.changeSpeed(-1); });
+        controls.label(function(){ return ts.formatSpeed() + "×"; }).width(60).center();
+        controls.button("+", Styles.clearTogglet, function(){ ts.changeSpeed(1); });
     }).pad(4).padRight(24).padBottom(88);
 
-    // Add to the scene root so the overlay is above the normal HUD fragments.
-    Core.scene.add(mobileControls);
-    mobileControls.toFront();
-}
+    Core.scene.add(ts.desktopControls);
+    ts.desktopControls.toFront();
+};
 
-function handleInput(){
+ts.handleDesktopInput = function(){
     if(Vars.state == null || !Vars.state.isPlaying()) return;
 
     if(Vars.net != null && Vars.net.active()){
-        if(speed != 1) setSpeed(1, false);
+        if(ts.speed != 1) ts.setSpeed(1, false);
         return;
     }
 
     if(Core.input.keyTap(KeyCode.f6)){
-        changeSpeed(-1);
+        ts.changeSpeed(-1);
     }else if(Core.input.keyTap(KeyCode.f7)){
-        changeSpeed(1);
+        ts.changeSpeed(1);
     }else if(Core.input.keyTap(KeyCode.f8)){
-        setSpeed(1, true);
+        ts.setSpeed(1, true);
     }
-}
+};
 
-function changeSpeed(direction){
+ts.changeSpeed = function(direction){
     if(Vars.net != null && Vars.net.active()){
-        if(Vars.ui != null && Vars.ui.hudfrag != null){
-            Vars.ui.hudfrag.showToast("Time Scale is disabled in multiplayer");
-        }
+        ts.showToast("Time Scale is disabled in multiplayer");
         return;
     }
-    const index = speedIndex();
-    const next = clampNumber(index + direction, 0, SPEEDS.length - 1);
-    setSpeed(SPEEDS[next], true);
-}
 
-function cycleSpeed(){
-    if(Vars.net != null && Vars.net.active()){
-        if(Vars.ui != null && Vars.ui.hudfrag != null){
-            Vars.ui.hudfrag.showToast("Time Scale is disabled in multiplayer");
-        }
-        return;
+    var next = ts.speedIndex() + direction;
+    if(next < 0) next = 0;
+    if(next >= ts.speeds.length) next = ts.speeds.length - 1;
+    ts.setSpeed(ts.speeds[next], true);
+};
+
+ts.setSpeed = function(value, notify){
+    if(value < ts.speeds[0]) value = ts.speeds[0];
+    if(value > ts.speeds[ts.speeds.length - 1]) value = ts.speeds[ts.speeds.length - 1];
+    ts.speed = value;
+
+    try{
+        Core.settings.put(ts.settingKey, ts.speedIndex() + "");
+    }catch(ignored){
     }
-    const next = (speedIndex() + 1) % SPEEDS.length;
-    setSpeed(SPEEDS[next], true);
-}
 
-function setSpeed(value, notify){
-    speed = clampNumber(value, MIN_SPEED, MAX_SPEED);
-    Core.settings.put(SETTING_SPEED_INDEX, speedIndex() + "");
+    if(notify) ts.showToast("[accent]Time Scale:[] " + ts.formatSpeed() + "×");
+};
 
-    if(notify && Vars.ui != null && Vars.ui.hudfrag != null){
-        Vars.ui.hudfrag.setHudText("[accent]Time Scale: " + formatSpeed() + "×[]");
-        Vars.ui.hudfrag.showToast("Time Scale: " + formatSpeed() + "×");
-    }
-}
-
-function readSpeed(){
-    const parsed = parseInt(Core.settings.getString(SETTING_SPEED_INDEX, "1"), 10);
+ts.readSpeed = function(){
+    var parsed = parseInt(Core.settings.getString(ts.settingKey, "1"), 10);
     if(!isFinite(parsed)) return 1;
-    const index = Math.max(0, Math.min(SPEEDS.length - 1, parsed));
-    return SPEEDS[index];
-}
+    if(parsed < 0) parsed = 0;
+    if(parsed >= ts.speeds.length) parsed = ts.speeds.length - 1;
+    return ts.speeds[parsed];
+};
 
-function speedIndex(){
-    for(let i = 0; i < SPEEDS.length; i++){
-        if(sameSpeed(speed, SPEEDS[i])) return i;
+ts.speedIndex = function(){
+    for(var i = 0; i < ts.speeds.length; i++){
+        var difference = ts.speed - ts.speeds[i];
+        if(difference < 0) difference = -difference;
+        if(difference < 0.0001) return i;
     }
     return 1;
-}
+};
 
-function sameSpeed(a, b){
-    return Math.abs(a - b) < 0.0001;
-}
-
-function clampNumber(value, min, max){
-    return Math.max(min, Math.min(max, value));
-}
-
-function formatSpeed(){
-    return speed === Math.floor(speed) ? Math.floor(speed) + "" : speed + "";
-}
+ts.formatSpeed = function(){
+    if(ts.speed == 0.5) return "0.5";
+    return ts.speed + "";
+};

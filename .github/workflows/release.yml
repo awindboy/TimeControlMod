@@ -15,6 +15,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Validate iOS script mod
         shell: bash
         run: |
@@ -25,6 +31,22 @@ jobs:
             echo 'iOS-incompatible scripting API found.'
             exit 1
           fi
+          if grep -Eq '^[[:space:]]*(const|let)[[:space:]]|^[[:space:]]*(print|String)[[:space:]]*\(' scripts/main.js; then
+            echo 'Rhino-unsafe local declaration or conversion call found.'
+            exit 1
+          fi
+
+      - name: Run Mindustry 159.7 iOS Rhino probe
+        shell: bash
+        run: |
+          mkdir -p build/rhino-probe/classes
+          curl --fail --location --retry 3 \
+            --output build/rhino-probe/rhino.jar \
+            https://jitpack.io/com/github/Anuken/rhino/e74ac129d2bff72c1deb536d7d99a0dbb7046d2e/rhino-e74ac129d2bff72c1deb536d7d99a0dbb7046d2e.jar
+          echo '891be180aceaa22ffc54c9a488ce626c650bbfa7b4ec0f7c7bc428301e9744e4  build/rhino-probe/rhino.jar' | sha256sum --check
+          javac -encoding UTF-8 -cp build/rhino-probe/rhino.jar \
+            -d build/rhino-probe/classes tests/RhinoIosProbe.java
+          java -cp build/rhino-probe/classes:build/rhino-probe/rhino.jar RhinoIosProbe
 
       - name: Package script mod
         run: zip -r mindustry-timescale-script.zip mod.hjson scripts content bundles README.md
